@@ -160,9 +160,10 @@ class MetadataDB:
             db_path = PROJECT_ROOT / settings.data_dir / "openaustria_rag.db"
         self._db_path = Path(db_path)
         self._db_path.parent.mkdir(parents=True, exist_ok=True)
-        self._conn = sqlite3.connect(str(self._db_path), check_same_thread=False)
+        self._conn = sqlite3.connect(str(self._db_path), check_same_thread=False, timeout=30)
         self._conn.execute("PRAGMA journal_mode=WAL")
         self._conn.execute("PRAGMA foreign_keys=ON")
+        self._conn.execute("PRAGMA busy_timeout=5000")
         self._conn.row_factory = sqlite3.Row
         self._init_schema()
 
@@ -187,9 +188,13 @@ class MetadataDB:
 
     def save_project(self, project: Project) -> None:
         self._conn.execute(
-            """INSERT OR REPLACE INTO projects
+            """INSERT INTO projects
                (id, name, description, status, created_at, updated_at, settings)
-               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+               VALUES (?, ?, ?, ?, ?, ?, ?)
+               ON CONFLICT(id) DO UPDATE SET
+                 name=excluded.name, description=excluded.description,
+                 status=excluded.status, updated_at=excluded.updated_at,
+                 settings=excluded.settings""",
             (
                 project.id,
                 project.name,
@@ -233,9 +238,12 @@ class MetadataDB:
 
     def save_source(self, source: Source) -> None:
         self._conn.execute(
-            """INSERT OR REPLACE INTO sources
+            """INSERT INTO sources
                (id, project_id, source_type, name, config, status, last_sync_at, error_message, created_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+               ON CONFLICT(id) DO UPDATE SET
+                 name=excluded.name, config=excluded.config, status=excluded.status,
+                 last_sync_at=excluded.last_sync_at, error_message=excluded.error_message""",
             (
                 source.id,
                 source.project_id,
@@ -286,9 +294,13 @@ class MetadataDB:
 
     def save_document(self, doc: Document) -> None:
         self._conn.execute(
-            """INSERT OR REPLACE INTO documents
+            """INSERT INTO documents
                (id, source_id, content_type, file_path, language, metadata, content_hash, created_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+               ON CONFLICT(id) DO UPDATE SET
+                 content_type=excluded.content_type, file_path=excluded.file_path,
+                 language=excluded.language, metadata=excluded.metadata,
+                 content_hash=excluded.content_hash""",
             (
                 doc.id,
                 doc.source_id,
@@ -338,11 +350,18 @@ class MetadataDB:
 
     def save_code_elements(self, elements: list[CodeElement]) -> None:
         self._conn.executemany(
-            """INSERT OR REPLACE INTO code_elements
+            """INSERT INTO code_elements
                (id, document_id, kind, name, short_name, signature, visibility,
                 parent_id, file_path, start_line, end_line, docstring,
                 annotations, implements, extends)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+               ON CONFLICT(id) DO UPDATE SET
+                 kind=excluded.kind, name=excluded.name, short_name=excluded.short_name,
+                 signature=excluded.signature, visibility=excluded.visibility,
+                 parent_id=excluded.parent_id, file_path=excluded.file_path,
+                 start_line=excluded.start_line, end_line=excluded.end_line,
+                 docstring=excluded.docstring, annotations=excluded.annotations,
+                 implements=excluded.implements, extends=excluded.extends""",
             [
                 (
                     e.id,
@@ -406,8 +425,9 @@ class MetadataDB:
 
     def save_gap_report(self, report: GapReport) -> None:
         self._conn.execute(
-            """INSERT OR REPLACE INTO gap_reports (id, project_id, created_at, summary)
-               VALUES (?, ?, ?, ?)""",
+            """INSERT INTO gap_reports (id, project_id, created_at, summary)
+               VALUES (?, ?, ?, ?)
+               ON CONFLICT(id) DO UPDATE SET summary=excluded.summary""",
             (
                 report.id,
                 report.project_id,
@@ -419,7 +439,7 @@ class MetadataDB:
 
     def save_gap_items(self, items: list[GapItem]) -> None:
         self._conn.executemany(
-            """INSERT OR REPLACE INTO gap_items
+            """INSERT INTO gap_items
                (id, report_id, gap_type, severity, code_element_id, code_element_name,
                 file_path, line, doc_reference, doc_chunk_id, similarity_score,
                 divergence_description, recommendation, llm_analysis, is_false_positive)
