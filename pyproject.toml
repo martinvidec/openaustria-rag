@@ -46,6 +46,10 @@ where = ["src"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = [
+    "integration: Integration tests spanning multiple components",
+    "requires_ollama: Tests that require a running Ollama instance",
+]
 
 [tool.ruff]
 target-version = "py311"
