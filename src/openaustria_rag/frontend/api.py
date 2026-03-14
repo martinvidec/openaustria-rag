@@ -283,13 +283,25 @@ def create_app() -> FastAPI:
             raise HTTPException(404, "Project not found")
 
         def run_analysis():
-            analyzer = GapAnalyzer(
-                db=db,
-                vector_store=vector_store,
-                embedding_service=embedding_service,
-                llm_service=llm_service,
-            )
-            analyzer.analyze(project_id)
+            import logging
+            log = logging.getLogger("openaustria_rag.gap_analysis")
+            try:
+                log.info(f"Starting gap analysis for project {project_id}")
+                analyzer = GapAnalyzer(
+                    db=db,
+                    vector_store=vector_store,
+                    embedding_service=embedding_service,
+                    llm_service=llm_service,
+                    run_llm_analysis=False,
+                )
+                report = analyzer.analyze(project_id)
+                log.info(
+                    f"Gap analysis complete: {report.summary.total_code_elements} elements, "
+                    f"{report.summary.undocumented} undocumented, "
+                    f"{report.summary.divergent} divergent"
+                )
+            except Exception:
+                log.exception(f"Gap analysis failed for project {project_id}")
 
         background_tasks.add_task(run_analysis)
         return {"message": "Gap analysis started", "project_id": project_id}

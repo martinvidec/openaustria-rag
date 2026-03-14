@@ -160,22 +160,42 @@ class GapAnalyzer:
     ) -> list[MatchResult]:
         matches = []
 
+        # Pre-lowercase all chunk contents for fast substring matching
+        chunk_contents_lower = [c["content"].lower() for c in doc_chunks]
+
         for element in code_elements:
             match = MatchResult(code_element=element)
 
-            # Name-based matching
+            # Name-based matching: fast exact substring first, then fuzzy fallback
             best_name_score = 0.0
             best_name_chunk = None
             search_terms = generate_search_terms(element)
 
-            for chunk in doc_chunks:
-                for term in search_terms:
-                    result = fuzzy_match_in_text(
-                        term, chunk["content"], threshold=self.name_threshold
-                    )
-                    if result.matched and result.score > best_name_score:
-                        best_name_score = result.score
-                        best_name_chunk = chunk
+            # Phase 1: Fast exact substring match
+            for term in search_terms:
+                term_lower = term.lower()
+                if len(term_lower) < 3:
+                    continue
+                for i, content_lower in enumerate(chunk_contents_lower):
+                    if term_lower in content_lower:
+                        score = min(1.0, 0.8 + len(term_lower) / 100)
+                        if score > best_name_score:
+                            best_name_score = score
+                            best_name_chunk = doc_chunks[i]
+                        break
+                if best_name_chunk:
+                    break
+
+            # Phase 2: Fuzzy fallback (only if no exact match, limit to first 20 chunks)
+            if not best_name_chunk:
+                for chunk in doc_chunks[:20]:
+                    for term in search_terms:
+                        result = fuzzy_match_in_text(
+                            term, chunk["content"], threshold=self.name_threshold
+                        )
+                        if result.matched and result.score > best_name_score:
+                            best_name_score = result.score
+                            best_name_chunk = chunk
 
             if best_name_chunk:
                 match.name_score = best_name_score

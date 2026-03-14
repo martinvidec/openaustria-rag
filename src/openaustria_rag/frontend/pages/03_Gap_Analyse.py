@@ -35,28 +35,31 @@ def main():
 
     st.caption(f"Projekt: **{st.session_state.current_project_name}**")
 
+    # Load latest report first to show status
+    try:
+        report = client.get_latest_gap_report(project_id)
+    except Exception as e:
+        st.error(f"Fehler: {e}")
+        report = None
+
     # Start analysis button
     col1, col2 = st.columns([1, 3])
     with col1:
         if st.button("Analyse starten", type="primary"):
-            with st.spinner("Gap-Analyse läuft..."):
-                try:
-                    client.start_gap_analysis(project_id)
-                    st.success("Analyse gestartet! Seite neu laden für Ergebnisse.")
-                except Exception as e:
-                    st.error(f"Fehler: {e}")
+            try:
+                client.start_gap_analysis(project_id)
+                st.info(
+                    "Gap-Analyse wurde im Hintergrund gestartet. "
+                    "Dies kann je nach Projektgröße einige Minuten dauern. "
+                    "Klicke auf **Ergebnisse aktualisieren** um den Status zu prüfen."
+                )
+            except Exception as e:
+                st.error(f"Fehler: {e}")
     with col2:
         if st.button("Ergebnisse aktualisieren"):
             st.rerun()
 
     st.divider()
-
-    # Load latest report
-    try:
-        report = client.get_latest_gap_report(project_id)
-    except Exception as e:
-        st.error(f"Fehler: {e}")
-        return
 
     if not report:
         st.info("Noch keine Gap-Analyse durchgeführt. Starte eine Analyse oben.")
