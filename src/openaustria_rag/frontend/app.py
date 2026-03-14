@@ -2,7 +2,7 @@
 
 import streamlit as st
 
-from .api_client import APIClient
+from openaustria_rag.frontend.api_client import APIClient
 
 API_URL = "http://localhost:8000"
 
