@@ -2,7 +2,7 @@
 
 import streamlit as st
 
-from ..app import get_client, init_session_state, render_sidebar
+from openaustria_rag.frontend.app import get_client, init_session_state, render_sidebar
 
 
 def main():
