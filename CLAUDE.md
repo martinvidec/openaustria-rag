@@ -57,3 +57,13 @@ The system is designed as a modular pipeline — specs document exact interfaces
 ## Language
 
 Documentation and specs are written in German. Code (variable names, comments, docstrings) should be in English. Prompt templates for the LLM are in German (target users are German-speaking).
+
+## Workflow
+
+**IMPORTANT:** At the start of every session, activate the `github-workflow` skill (`.claude/skills/github-workflow/SKILL.md`). This skill manages issue-based development with GitHub Flow:
+- Load and present open issues at session start
+- Create feature branches per issue (`feature/<number>-<description>`)
+- Use Conventional Commits with issue references
+- Create pull requests with standardized templates on completion
+
+Every implementation session should work on exactly one GitHub issue.
