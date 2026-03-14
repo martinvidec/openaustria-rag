@@ -16,7 +16,7 @@ authors = [
 dependencies = [
     "llama-index>=0.11",
     "chromadb>=0.5",
-    "tree-sitter>=0.22",
+    "tree-sitter>=0.21,<0.23",
     "tree-sitter-languages",
     "fastapi>=0.110",
     "uvicorn",
