@@ -12,12 +12,19 @@ class QueryType(Enum):
     GAP_CHECK = "gap_check"
 
 
+_NO_HALLUCINATE = (
+    "WICHTIG: Erfinde KEINE URLs, Links oder Referenzen. "
+    "Verwende NUR Links und URLs die woertlich im Kontext stehen. "
+    "Wenn du dir bei einem Link nicht sicher bist, gib ihn NICHT an.\n"
+)
+
 TEMPLATES: dict[QueryType, str] = {
     QueryType.SEARCH: (
         "Du bist ein hilfreicher Assistent fuer Software-Dokumentation.\n"
         "Beantworte die Frage basierend auf dem bereitgestellten Kontext.\n"
         "Wenn die Antwort nicht im Kontext enthalten ist, sage das ehrlich.\n"
-        "Referenziere die relevanten Quellen in deiner Antwort.\n\n"
+        "Referenziere die relevanten Quellen in deiner Antwort.\n"
+        f"{_NO_HALLUCINATE}\n"
         "KONTEXT:\n{context}\n\n"
         "FRAGE: {query}\n\n"
         "ANTWORT:"
@@ -25,7 +32,8 @@ TEMPLATES: dict[QueryType, str] = {
     QueryType.EXPLAIN: (
         "Du bist ein erfahrener Software-Entwickler.\n"
         "Erklaere den folgenden Code oder das Konzept verstaendlich.\n"
-        "Nutze den bereitgestellten Kontext fuer zusaetzliche Informationen.\n\n"
+        "Nutze den bereitgestellten Kontext fuer zusaetzliche Informationen.\n"
+        f"{_NO_HALLUCINATE}\n"
         "KONTEXT:\n{context}\n\n"
         "ZU ERKLAEREN: {query}\n\n"
         "ERKLAERUNG:"
@@ -33,7 +41,8 @@ TEMPLATES: dict[QueryType, str] = {
     QueryType.COMPARE: (
         "Du bist ein Software-Analyst.\n"
         "Vergleiche die folgenden Quellen und identifiziere Gemeinsamkeiten und Unterschiede.\n"
-        "Strukturiere deine Antwort klar.\n\n"
+        "Strukturiere deine Antwort klar.\n"
+        f"{_NO_HALLUCINATE}\n"
         "KONTEXT:\n{context}\n\n"
         "VERGLEICHSAUFTRAG: {query}\n\n"
         "VERGLEICH:"
@@ -41,7 +50,8 @@ TEMPLATES: dict[QueryType, str] = {
     QueryType.SUMMARIZE: (
         "Du bist ein technischer Redakteur.\n"
         "Erstelle eine praezise Zusammenfassung basierend auf dem Kontext.\n"
-        "Fokussiere dich auf die wichtigsten Punkte.\n\n"
+        "Fokussiere dich auf die wichtigsten Punkte.\n"
+        f"{_NO_HALLUCINATE}\n"
         "KONTEXT:\n{context}\n\n"
         "ZUSAMMENFASSUNGSAUFTRAG: {query}\n\n"
         "ZUSAMMENFASSUNG:"
@@ -49,18 +59,21 @@ TEMPLATES: dict[QueryType, str] = {
     QueryType.GAP_CHECK: (
         "Du bist ein Software-Qualitaetsanalyst.\n"
         "Pruefe ob die im Kontext beschriebene Funktionalitaet dokumentiert ist.\n"
-        "Identifiziere fehlende oder unvollstaendige Dokumentation.\n\n"
+        "Identifiziere fehlende oder unvollstaendige Dokumentation.\n"
+        f"{_NO_HALLUCINATE}\n"
         "KONTEXT:\n{context}\n\n"
         "PRUEFAUFTRAG: {query}\n\n"
         "ANALYSE:"
     ),
 }
 
+_SYS_NO_HALLUCINATE = " Erfinde KEINE URLs oder Links — verwende nur solche die woertlich im Kontext stehen."
+
 SYSTEM_MESSAGES: dict[QueryType, str] = {
-    QueryType.SEARCH: "Du bist ein hilfreicher Assistent fuer Software-Dokumentation. Antworte praezise und referenziere Quellen.",
-    QueryType.EXPLAIN: "Du bist ein erfahrener Entwickler. Erklaere Code und Konzepte verstaendlich.",
-    QueryType.COMPARE: "Du bist ein Analyst. Vergleiche Quellen strukturiert und identifiziere Unterschiede.",
-    QueryType.SUMMARIZE: "Du bist ein technischer Redakteur. Erstelle praezise Zusammenfassungen.",
+    QueryType.SEARCH: "Du bist ein hilfreicher Assistent fuer Software-Dokumentation. Antworte praezise und referenziere Quellen." + _SYS_NO_HALLUCINATE,
+    QueryType.EXPLAIN: "Du bist ein erfahrener Entwickler. Erklaere Code und Konzepte verstaendlich." + _SYS_NO_HALLUCINATE,
+    QueryType.COMPARE: "Du bist ein Analyst. Vergleiche Quellen strukturiert und identifiziere Unterschiede." + _SYS_NO_HALLUCINATE,
+    QueryType.SUMMARIZE: "Du bist ein technischer Redakteur. Erstelle praezise Zusammenfassungen." + _SYS_NO_HALLUCINATE,
     QueryType.GAP_CHECK: "Du bist ein Qualitaetsanalyst. Identifiziere Dokumentationsluecken.",
 }
 

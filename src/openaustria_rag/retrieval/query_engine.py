@@ -143,6 +143,8 @@ class QueryEngine:
             answer = self.llm.generate(prompt)
         generation_ms = (time.monotonic() - t1) * 1000
 
+        answer = _sanitize_links(answer, context_text)
+
         return QueryResult(
             answer=answer,
             query_type=query_type,
@@ -249,3 +251,22 @@ class QueryEngine:
             parts.append(f"[Quelle {i}: {source_info}]\n{chunk.content}")
 
         return "\n\n---\n\n".join(parts)
+
+
+def _sanitize_links(answer: str, context: str) -> str:
+    """Remove or flag URLs in the answer that don't appear in the context."""
+    import re
+    url_pattern = re.compile(r'https?://[^\s\)\]>\"\']+')
+
+    context_urls = set(url_pattern.findall(context))
+
+    def check_url(match):
+        url = match.group(0)
+        # Check if URL (or a prefix of it) exists in context
+        for ctx_url in context_urls:
+            if url.startswith(ctx_url) or ctx_url.startswith(url):
+                return url
+        # Hallucinated — remove the link but keep descriptive text
+        return f"~~{url}~~ *(Link nicht verifiziert)*"
+
+    return url_pattern.sub(check_url, answer)
