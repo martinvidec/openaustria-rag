@@ -43,7 +43,9 @@ def main():
             if msg.get("sources"):
                 with st.expander(f"Quellen ({len(msg['sources'])})"):
                     for i, src in enumerate(msg["sources"], 1):
-                        st.markdown(f"{i}. `{src.get('file_path', 'unbekannt')}`")
+                        icon = {"documentation": "📄", "code": "💻", "config": "⚙️"}.get(src.get("source_type", ""), "📁")
+                        score = f" ({src['score']:.3f})" if "score" in src else ""
+                        st.markdown(f"{i}. {icon} `{src.get('file_path', 'unbekannt')}`{score}")
             if msg.get("metrics"):
                 m = msg["metrics"]
                 cols = st.columns(4)

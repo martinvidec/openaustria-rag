@@ -284,23 +284,30 @@ def create_app() -> FastAPI:
                 result = vector_store.query(col, query_embedding, top_k=body.top_k)
                 ids = result.get("ids", [[]])[0]
                 docs = result.get("documents", [[]])[0]
+                dists = result.get("distances", [[]])[0]
                 metas = result.get("metadatas", [[]])[0]
                 for i, cid in enumerate(ids):
+                    score = 1.0 - (dists[i] / 2.0) if i < len(dists) else 0.0
                     all_chunks.append({
-                        "id": cid, "content": docs[i],
+                        "id": cid, "content": docs[i], "score": score,
                         "file_path": metas[i].get("file_path", "") if i < len(metas) else "",
+                        "source_type": ct,
                     })
+
+            # Sort by score descending — best matches first regardless of collection
+            all_chunks.sort(key=lambda c: c["score"], reverse=True)
 
             retrieval_ms = (_time.monotonic() - t0) * 1000
 
-            # Send sources event
-            yield f"data: {_json.dumps({'type': 'sources', 'sources': [{'file_path': c['file_path']} for c in all_chunks[:body.top_k]], 'retrieval_time_ms': round(retrieval_ms, 1)})}\n\n"
+            # Send sources event (top chunks after sorting)
+            top_chunks = all_chunks[:body.top_k]
+            yield f"data: {_json.dumps({'type': 'sources', 'sources': [{'file_path': c['file_path'], 'source_type': c['source_type'], 'score': round(c['score'], 3)} for c in top_chunks], 'retrieval_time_ms': round(retrieval_ms, 1)})}\n\n"
 
-            # Assemble context
+            # Assemble context with budget
             context_parts = []
             budget = query_engine.context_budget.available_context_tokens
             used = 0
-            for c in all_chunks[:body.top_k]:
+            for c in top_chunks:
                 ct = len(c["content"]) // 4
                 if used + ct > budget:
                     break
