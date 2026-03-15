@@ -23,7 +23,27 @@ def main():
     col1, col2 = st.columns(2)
     with col1:
         ollama_url = st.text_input("Ollama URL", value=settings["ollama"]["base_url"])
-        llm_model = st.text_input("LLM-Modell", value=settings["ollama"]["model"])
+
+        # Model selector — try to load available models from Ollama
+        available_models = [settings["ollama"]["model"]]
+        try:
+            import requests
+            resp = requests.get(f"{settings['ollama']['base_url']}/api/tags", timeout=5)
+            if resp.ok:
+                models = [m["name"] for m in resp.json().get("models", [])]
+                if models:
+                    available_models = models
+        except Exception:
+            pass
+
+        current_model = settings["ollama"]["model"]
+        model_idx = 0
+        for i, m in enumerate(available_models):
+            if m.startswith(current_model):
+                model_idx = i
+                break
+
+        llm_model = st.selectbox("LLM-Modell", available_models, index=model_idx)
     with col2:
         temperature = st.slider(
             "Temperature", 0.0, 1.0,

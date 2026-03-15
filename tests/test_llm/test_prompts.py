@@ -101,8 +101,8 @@ class TestPromptManager:
 class TestContextBudget:
     def test_default_available_tokens(self):
         budget = ContextBudget()
-        # 8192 - 2048 - 512 = 5632
-        assert budget.available_context_tokens == 5632
+        # 8192 - 1024 - 512 = 6656
+        assert budget.available_context_tokens == 6656
 
     def test_custom_budget(self):
         budget = ContextBudget(
