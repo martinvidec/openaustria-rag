@@ -297,6 +297,15 @@ def create_app() -> FastAPI:
             # Sort by score descending — best matches first regardless of collection
             all_chunks.sort(key=lambda c: c["score"], reverse=True)
 
+            # Deduplicate by file_path (keep highest score)
+            seen_paths = set()
+            deduped = []
+            for c in all_chunks:
+                if c["file_path"] not in seen_paths:
+                    seen_paths.add(c["file_path"])
+                    deduped.append(c)
+            all_chunks = deduped
+
             retrieval_ms = (_time.monotonic() - t0) * 1000
 
             # Send sources event (top chunks after sorting)
