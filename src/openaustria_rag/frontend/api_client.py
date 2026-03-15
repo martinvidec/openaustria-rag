@@ -79,13 +79,28 @@ class APIClient:
     # --- Query ---
 
     def query(self, project_id: str, query: str, session_id: str | None = None,
-              query_type: str | None = None, top_k: int = 10) -> dict:
+              query_type: str | None = None, top_k: int = 5) -> dict:
         body = {"query": query, "top_k": top_k}
         if session_id:
             body["session_id"] = session_id
         if query_type:
             body["query_type"] = query_type
         return self._post(f"/api/projects/{project_id}/query", json=body)
+
+    def query_stream(self, project_id: str, query: str, top_k: int = 5):
+        """Streaming query returning an iterator of SSE events."""
+        import json
+        body = {"query": query, "top_k": top_k}
+        resp = self._session.post(
+            self._url(f"/api/projects/{project_id}/query/stream"),
+            json=body, stream=True, timeout=self.timeout,
+        )
+        resp.raise_for_status()
+        for line in resp.iter_lines():
+            if line:
+                text = line.decode("utf-8")
+                if text.startswith("data: "):
+                    yield json.loads(text[6:])
 
     def get_chat_history(self, project_id: str, session_id: str) -> list[dict]:
         return self._get(

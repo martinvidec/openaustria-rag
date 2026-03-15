@@ -105,7 +105,7 @@ class ContextBudget:
     def __init__(
         self,
         context_length: int = 8192,
-        max_response_tokens: int = 2048,
+        max_response_tokens: int = 1024,
         prompt_overhead: int = 512,
     ):
         self.context_length = context_length

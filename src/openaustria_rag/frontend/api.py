@@ -252,6 +252,81 @@ def create_app() -> FastAPI:
             token_count=result.token_count,
         )
 
+    @app.post("/api/projects/{project_id}/query/stream")
+    def query_project_stream(project_id: str, body: QueryRequest):
+        """Streaming query via Server-Sent Events."""
+        if not db.get_project(project_id):
+            raise HTTPException(404, "Project not found")
+
+        import json as _json
+        import time as _time
+
+        qt = QueryType(body.query_type) if body.query_type else None
+
+        def event_stream():
+            from ..ingestion.embedding_service import EmbeddingPreprocessor as _EP
+
+            t0 = _time.monotonic()
+
+            # Retrieve
+            preprocessed = _EP.preprocess_query(body.query)
+            query_embedding = embedding_service.embed_single(preprocessed)
+
+            from ..retrieval.query_engine import CONTENT_TYPES
+            all_chunks = []
+            for ct in CONTENT_TYPES:
+                col_name = vector_store.collection_name(project_id, ct)
+                if col_name not in vector_store.list_collections():
+                    continue
+                col = vector_store.get_or_create_collection(col_name)
+                if col.count() == 0:
+                    continue
+                result = vector_store.query(col, query_embedding, top_k=body.top_k)
+                ids = result.get("ids", [[]])[0]
+                docs = result.get("documents", [[]])[0]
+                metas = result.get("metadatas", [[]])[0]
+                for i, cid in enumerate(ids):
+                    all_chunks.append({
+                        "id": cid, "content": docs[i],
+                        "file_path": metas[i].get("file_path", "") if i < len(metas) else "",
+                    })
+
+            retrieval_ms = (_time.monotonic() - t0) * 1000
+
+            # Send sources event
+            yield f"data: {_json.dumps({'type': 'sources', 'sources': [{'file_path': c['file_path']} for c in all_chunks[:body.top_k]], 'retrieval_time_ms': round(retrieval_ms, 1)})}\n\n"
+
+            # Assemble context
+            context_parts = []
+            budget = query_engine.context_budget.available_context_tokens
+            used = 0
+            for c in all_chunks[:body.top_k]:
+                ct = len(c["content"]) // 4
+                if used + ct > budget:
+                    break
+                context_parts.append(c["content"])
+                used += ct
+            context = "\n\n---\n\n".join(context_parts) or "(Kein Kontext)"
+
+            # Build prompt
+            query_type = qt or query_engine._analyze_query(body.query)
+            from ..llm.prompts import PromptManager
+            prompt = PromptManager.build_prompt(query_type, body.query, context)
+
+            # Stream LLM tokens
+            t1 = _time.monotonic()
+            token_count = 0
+            for token in llm_service.stream_generate(prompt):
+                token_count += 1
+                yield f"data: {_json.dumps({'type': 'token', 'content': token})}\n\n"
+
+            gen_ms = (_time.monotonic() - t1) * 1000
+            tps = token_count / (gen_ms / 1000) if gen_ms > 0 else 0
+
+            yield f"data: {_json.dumps({'type': 'done', 'token_count': token_count, 'generation_time_ms': round(gen_ms, 1), 'tokens_per_second': round(tps, 1)})}\n\n"
+
+        return StreamingResponse(event_stream(), media_type="text/event-stream")
+
     @app.get("/api/projects/{project_id}/chat/history")
     def get_chat_history(project_id: str, session_id: str):
         if not db.get_project(project_id):
