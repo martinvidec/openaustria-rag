@@ -79,7 +79,7 @@ class APIClient:
     # --- Query ---
 
     def query(self, project_id: str, query: str, session_id: str | None = None,
-              query_type: str | None = None, top_k: int = 5) -> dict:
+              query_type: str | None = None, top_k: int = 15) -> dict:
         body = {"query": query, "top_k": top_k}
         if session_id:
             body["session_id"] = session_id
@@ -87,7 +87,7 @@ class APIClient:
             body["query_type"] = query_type
         return self._post(f"/api/projects/{project_id}/query", json=body)
 
-    def query_stream(self, project_id: str, query: str, top_k: int = 5):
+    def query_stream(self, project_id: str, query: str, top_k: int = 15):
         """Streaming query returning an iterator of SSE events."""
         import json
         body = {"query": query, "top_k": top_k}

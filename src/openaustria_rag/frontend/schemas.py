@@ -59,7 +59,7 @@ class SyncStatus(BaseModel):
 class QueryRequest(BaseModel):
     query: str = Field(..., min_length=1)
     query_type: str | None = None
-    top_k: int = 5
+    top_k: int = 15
     session_id: str | None = None
     filters: dict | None = None
 

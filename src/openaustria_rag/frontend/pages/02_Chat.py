@@ -28,7 +28,7 @@ def main():
     with st.sidebar:
         st.subheader("Chat-Einstellungen")
         use_streaming = st.toggle("Streaming", value=True, help="Antwort Wort für Wort anzeigen")
-        top_k = st.slider("Quellen (top_k)", 1, 20, 5, help="Anzahl der abgerufenen Kontextquellen")
+        top_k = st.slider("Quellen (top_k)", 1, 30, 15, help="Anzahl der abgerufenen Kontextquellen. ContextBudget begrenzt automatisch was in den Prompt passt.")
 
         st.divider()
         if st.button("Chat löschen"):
