@@ -19,7 +19,7 @@ class OllamaConfig(BaseModel):
     base_url: str = "http://localhost:11434"
     model: str = "mistral"
     temperature: float = 0.1
-    timeout_seconds: int = 120
+    timeout_seconds: int = 300
 
 
 class EmbeddingConfig(BaseModel):

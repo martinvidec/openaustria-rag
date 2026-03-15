@@ -211,7 +211,10 @@ def create_app() -> FastAPI:
             filters=body.filters,
             chat_history=chat_history,
         )
-        result = query_engine.query(ctx)
+        try:
+            result = query_engine.query(ctx)
+        except Exception as e:
+            raise HTTPException(503, f"LLM query failed: {e}")
 
         # Save to chat history
         if body.session_id:
