@@ -25,12 +25,17 @@ def main():
         ollama_url = st.text_input("Ollama URL", value=settings["ollama"]["base_url"])
 
         # Model selector — try to load available models from Ollama
+        # Filter out embedding-only models that aren't suitable for chat/generation
+        EMBEDDING_MODELS = {"nomic-embed-text"}
         available_models = [settings["ollama"]["model"]]
         try:
             import requests
             resp = requests.get(f"{settings['ollama']['base_url']}/api/tags", timeout=5)
             if resp.ok:
-                models = [m["name"] for m in resp.json().get("models", [])]
+                models = [
+                    m["name"] for m in resp.json().get("models", [])
+                    if not any(m["name"].startswith(emb) for emb in EMBEDDING_MODELS)
+                ]
                 if models:
                     available_models = models
         except Exception:
@@ -62,11 +67,11 @@ def main():
 
     st.divider()
 
-    # Embedding
+    # Embedding (read-only — fixed to nomic-embed-text for consistent vector dimensions)
     st.subheader("Embedding")
     col1, col2 = st.columns(2)
     with col1:
-        emb_model = st.text_input("Embedding-Modell", value=settings["embedding"]["model"])
+        emb_model = st.text_input("Embedding-Modell", value=settings["embedding"]["model"], disabled=True)
     with col2:
         emb_dim = st.number_input("Dimensionen", value=settings["embedding"]["dimensions"], disabled=True)
 
