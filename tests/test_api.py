@@ -11,8 +11,13 @@ from fastapi.testclient import TestClient
 def client(tmp_path, monkeypatch):
     """Create a test client with services pointing to tmp_path."""
     import openaustria_rag.config as cfg
+    import openaustria_rag.db as db_mod
+    import openaustria_rag.retrieval.vector_store as vs_mod
+
     monkeypatch.setattr(cfg, "PROJECT_ROOT", tmp_path)
     monkeypatch.setattr(cfg, "DEFAULT_CONFIG_PATH", tmp_path / "config.yaml")
+    monkeypatch.setattr(db_mod, "PROJECT_ROOT", tmp_path)
+    monkeypatch.setattr(vs_mod, "PROJECT_ROOT", tmp_path)
 
     # Patch EmbeddingService and LLMService to not connect to Ollama
     with patch("openaustria_rag.frontend.api.EmbeddingService") as mock_emb_cls, \
