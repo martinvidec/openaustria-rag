@@ -135,3 +135,6 @@ class APIClient:
 
     def get_settings(self) -> dict:
         return self._get("/api/settings")
+
+    def update_settings(self, **kwargs) -> dict:
+        return self._put("/api/settings", json=kwargs)

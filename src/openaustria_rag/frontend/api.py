@@ -3,12 +3,13 @@
 import uuid
 from dataclasses import asdict
 from datetime import UTC, datetime
+from pathlib import Path
 
 from fastapi import BackgroundTasks, FastAPI, HTTPException
 from fastapi.responses import JSONResponse, StreamingResponse
 
 from ..analysis.gap_analyzer import FalsePositiveManager, GapAnalyzer, GapReportExporter
-from ..config import get_settings
+from ..config import DEFAULT_CONFIG_PATH, get_settings
 from ..db import MetadataDB
 from ..ingestion.chunking import ChunkingService
 from ..ingestion.code_parser import CodeParser
@@ -36,6 +37,7 @@ from .schemas import (
     QueryRequest,
     QueryResponse,
     SettingsResponse,
+    SettingsUpdate,
     SourceCreate,
     SourceResponse,
     SyncStatus,
@@ -487,6 +489,40 @@ def create_app() -> FastAPI:
             vector_store={"persist_path": s.vector_store.persist_path, "distance_metric": s.vector_store.distance_metric},
             gap_analysis={"name_similarity_threshold": s.gap_analysis.name_similarity_threshold},
         )
+
+    @app.put("/api/settings", response_model=SettingsResponse)
+    def update_settings_endpoint(body: SettingsUpdate):
+        import yaml
+
+        # Load existing config.yaml or start fresh
+        config = {}
+        if DEFAULT_CONFIG_PATH.exists():
+            with open(DEFAULT_CONFIG_PATH) as f:
+                config = yaml.safe_load(f) or {}
+
+        # Merge updates
+        if body.ollama:
+            config.setdefault("ollama", {})
+            config["ollama"].update(body.ollama)
+            # Update running services in-memory
+            if "model" in body.ollama:
+                llm_service.model = body.ollama["model"]
+            if "temperature" in body.ollama:
+                llm_service.temperature = body.ollama["temperature"]
+            if "base_url" in body.ollama:
+                llm_service.base_url = body.ollama["base_url"].rstrip("/")
+        if body.chunking:
+            config.setdefault("chunking", {})
+            config["chunking"].update(body.chunking)
+        if body.gap_analysis:
+            config.setdefault("gap_analysis", {})
+            config["gap_analysis"].update(body.gap_analysis)
+
+        # Write config.yaml
+        with open(DEFAULT_CONFIG_PATH, "w") as f:
+            yaml.safe_dump(config, f, default_flow_style=False)
+
+        return get_settings_endpoint()
 
     return app
 

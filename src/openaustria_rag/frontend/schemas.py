@@ -96,6 +96,12 @@ class HealthResponse(BaseModel):
     database_ok: bool = True
 
 
+class SettingsUpdate(BaseModel):
+    ollama: dict | None = None
+    chunking: dict | None = None
+    gap_analysis: dict | None = None
+
+
 class SettingsResponse(BaseModel):
     ollama: dict
     embedding: dict
