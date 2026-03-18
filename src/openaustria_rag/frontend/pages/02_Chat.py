@@ -70,12 +70,12 @@ def main():
 
         with st.chat_message("assistant"):
             if use_streaming:
-                _handle_streaming(client, project_id, prompt, top_k)
+                _handle_streaming(client, project_id, prompt, top_k, active_model)
             else:
-                _handle_blocking(client, project_id, prompt, top_k)
+                _handle_blocking(client, project_id, prompt, top_k, active_model)
 
 
-def _handle_streaming(client, project_id, prompt, top_k):
+def _handle_streaming(client, project_id, prompt, top_k, active_model):
     """Stream tokens word by word."""
     placeholder = st.empty()
     full_response = ""
@@ -125,7 +125,7 @@ def _handle_streaming(client, project_id, prompt, top_k):
         })
 
 
-def _handle_blocking(client, project_id, prompt, top_k):
+def _handle_blocking(client, project_id, prompt, top_k, active_model):
     """Non-streaming query with spinner."""
     with st.spinner("Suche und generiere Antwort..."):
         try:
