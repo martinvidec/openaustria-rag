@@ -21,6 +21,13 @@ def main():
 
     st.caption(f"Projekt: **{st.session_state.current_project_name}**")
 
+    # Load current model name for display in metrics
+    try:
+        _settings = client.get_settings()
+        active_model = _settings["ollama"]["model"]
+    except Exception:
+        active_model = "?"
+
     if not st.session_state.chat_session_id:
         st.session_state.chat_session_id = str(uuid.uuid4())
 
@@ -48,11 +55,12 @@ def main():
                         st.markdown(f"{i}. {icon} `{src.get('file_path', 'unbekannt')}`{score}")
             if msg.get("metrics"):
                 m = msg["metrics"]
-                cols = st.columns(4)
-                cols[0].metric("Retrieval", f"{m.get('retrieval_time_ms', 0):.0f}ms")
-                cols[1].metric("Generierung", f"{m.get('generation_time_ms', 0):.0f}s")
-                cols[2].metric("Tokens", m.get("token_count", 0))
-                cols[3].metric("Geschw.", f"{m.get('tokens_per_second', 0):.1f} tok/s")
+                cols = st.columns(5)
+                cols[0].metric("Modell", m.get("model", active_model))
+                cols[1].metric("Retrieval", f"{m.get('retrieval_time_ms', 0):.0f}ms")
+                cols[2].metric("Generierung", f"{m.get('generation_time_ms', 0):.0f}s")
+                cols[3].metric("Tokens", m.get("token_count", 0))
+                cols[4].metric("Geschw.", f"{m.get('tokens_per_second', 0):.1f} tok/s")
 
     # Chat input
     if prompt := st.chat_input("Frage stellen..."):
@@ -95,11 +103,13 @@ def _handle_streaming(client, project_id, prompt, top_k):
                     st.markdown(f"{i}. `{src.get('file_path', 'unbekannt')}`")
 
         if metrics:
-            cols = st.columns(4)
-            cols[0].metric("Retrieval", f"{metrics.get('retrieval_time_ms', 0):.0f}ms")
-            cols[1].metric("Generierung", f"{metrics.get('generation_time_ms', 0):.1f}s")
-            cols[2].metric("Tokens", metrics.get("token_count", 0))
-            cols[3].metric("Geschw.", f"{metrics.get('tokens_per_second', 0):.1f} tok/s")
+            metrics["model"] = active_model
+            cols = st.columns(5)
+            cols[0].metric("Modell", active_model)
+            cols[1].metric("Retrieval", f"{metrics.get('retrieval_time_ms', 0):.0f}ms")
+            cols[2].metric("Generierung", f"{metrics.get('generation_time_ms', 0):.1f}s")
+            cols[3].metric("Tokens", metrics.get("token_count", 0))
+            cols[4].metric("Geschw.", f"{metrics.get('tokens_per_second', 0):.1f} tok/s")
 
         st.session_state.chat_messages.append({
             "role": "assistant",
@@ -132,16 +142,18 @@ def _handle_blocking(client, project_id, prompt, top_k):
             tps = tokens / gen_s if gen_s > 0 else 0
 
             metrics = {
+                "model": active_model,
                 "retrieval_time_ms": result.get("retrieval_time_ms", 0),
                 "generation_time_ms": gen_s,
                 "token_count": tokens,
                 "tokens_per_second": tps,
             }
-            cols = st.columns(4)
-            cols[0].metric("Retrieval", f"{metrics['retrieval_time_ms']:.0f}ms")
-            cols[1].metric("Generierung", f"{metrics['generation_time_ms']:.1f}s")
-            cols[2].metric("Tokens", metrics["token_count"])
-            cols[3].metric("Geschw.", f"{metrics['tokens_per_second']:.1f} tok/s")
+            cols = st.columns(5)
+            cols[0].metric("Modell", active_model)
+            cols[1].metric("Retrieval", f"{metrics['retrieval_time_ms']:.0f}ms")
+            cols[2].metric("Generierung", f"{metrics['generation_time_ms']:.1f}s")
+            cols[3].metric("Tokens", metrics["token_count"])
+            cols[4].metric("Geschw.", f"{metrics['tokens_per_second']:.1f} tok/s")
 
             st.session_state.chat_messages.append({
                 "role": "assistant", "content": answer, "metrics": metrics,
