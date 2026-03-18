@@ -5,7 +5,7 @@ Eine Dokumentationsplattform, die verschiedene Quellen (Git-Repos, Confluence, Z
 ## Kernfunktionen
 
 - **Cross-Source-Suche** -- Code, Dokumentation und Konfiguration aus verschiedenen Quellen in einer Plattform durchsuchen
-- **Streaming Chat** -- RAG-basierter Chat mit Wort-fuer-Wort-Streaming, Quellenangaben und Performance-Metriken (tok/s)
+- **Streaming Chat** -- RAG-basierter Chat mit Wort-fuer-Wort-Streaming, Quellenangaben und Performance-Metriken (Modell, tok/s)
 - **Gap-Analyse** -- Automatische Erkennung von undokumentiertem Code, fehlender Implementierung und Divergenzen zwischen Code und Dokumentation
 - **Datenhoheit** -- Vollstaendig lokaler Betrieb mit Ollama auf Hardware mit 16 GB RAM, keine Cloud-Abhaengigkeit
 
@@ -50,8 +50,11 @@ pip install -e ".[dev]"
 # 3. Ollama installieren und Modelle herunterladen
 brew install ollama          # macOS
 brew services start ollama
-ollama pull mistral
-ollama pull nomic-embed-text
+ollama pull mistral               # Standard-LLM
+ollama pull nomic-embed-text      # Embedding (fest konfiguriert)
+# Optional: weitere LLM-Modelle
+ollama pull qwen2.5-coder:7b     # Code-optimiert, ideal fuer 16 GB RAM
+ollama pull qwen2.5-coder:14b    # Leistungsstaerker, benoetigt ~8.5 GB VRAM
 
 # 4. Backend starten
 uvicorn openaustria_rag.main:app --host 0.0.0.0 --port 8000 &
@@ -75,7 +78,7 @@ streamlit run src/openaustria_rag/frontend/app.py --server.port 8501
 | Komponente | Technologie |
 |---|---|
 | Sprache | Python 3.11+ |
-| LLM Runtime | Ollama (Mistral 7B) |
+| LLM Runtime | Ollama (Mistral 7B, Qwen 2.5 Coder 7B/14B) |
 | Embeddings | Nomic Embed Text v1.5 (768 dim) |
 | Vector DB | ChromaDB 1.5+ |
 | Code Parsing | tree-sitter (Java, Python, TypeScript) |
@@ -127,7 +130,7 @@ openaustria-rag/
 │       │   ├── 02_Chat.py             # Streaming Chat mit Quellen
 │       │   ├── 03_Gap_Analyse.py      # Dashboard mit Filtern und Export
 │       │   ├── 04_Quellen.py          # Git/ZIP/Confluence Verwaltung
-│       │   └── 05_Einstellungen.py    # Modell-Auswahl, Parameter
+│       │   └── 05_Einstellungen.py    # Modell-Auswahl, Persistierung (config.yaml)
 │       └── components/
 │           ├── chat_message.py        # Chat-Nachricht Renderer
 │           └── gap_table.py           # Gap-Tabelle mit Filtern
@@ -165,16 +168,20 @@ pytest tests/ --cov=openaustria_rag
 
 ## Konfiguration
 
-Konfiguration ueber `config.yaml` oder Umgebungsvariablen (Prefix `OARAG_`):
+Konfiguration ueber die Einstellungen-Seite im UI, `config.yaml` oder Umgebungsvariablen (Prefix `OARAG_`):
+
+- **UI**: Einstellungen-Seite speichert direkt in `config.yaml` und aktualisiert laufende Services sofort
+- **LLM-Modell**: Im UI zwischen allen installierten Ollama-Modellen waehlbar (Embedding-Modelle werden automatisch ausgefiltert)
+- **Embedding-Modell**: Fest auf `nomic-embed-text` konfiguriert (Aenderung wuerde bestehende Vektor-Indizes brechen)
 
 ```yaml
 ollama:
   base_url: "http://localhost:11434"
-  model: "mistral"
+  model: "qwen2.5-coder:7b"    # oder: mistral, qwen2.5-coder:14b
   temperature: 0.1
 
 embedding:
-  model: "nomic-embed-text"
+  model: "nomic-embed-text"     # nicht aendern
 
 chunking:
   code_max_tokens: 2048
@@ -188,7 +195,7 @@ vector_store:
 
 ```bash
 # Oder per Environment
-export OARAG_OLLAMA__MODEL=llama3
+export OARAG_OLLAMA__MODEL=qwen2.5-coder:7b
 export OARAG_OLLAMA__BASE_URL=http://localhost:11434
 ```
 
@@ -199,6 +206,7 @@ REST API auf `http://localhost:8000`:
 | Methode | Endpoint | Beschreibung |
 |---|---|---|
 | GET | `/api/health` | Health Check (Ollama, DB) |
+| GET/PUT | `/api/settings` | Einstellungen lesen/speichern |
 | GET/POST | `/api/projects` | Projekte auflisten/erstellen |
 | POST | `/api/projects/{id}/sources` | Quelle hinzufuegen |
 | POST | `/api/sources/{id}/sync` | Sync starten (Background) |
