@@ -1,5 +1,6 @@
 """FastAPI REST API (SPEC-06 Section 4)."""
 
+import threading
 import uuid
 from dataclasses import asdict
 from datetime import UTC, datetime
@@ -373,34 +374,72 @@ def create_app() -> FastAPI:
 
     # --- Gap Analysis ---
 
+    # In-memory status tracking for gap analyses {project_id: {status, started_at, error}}
+    _gap_status: dict[str, dict] = {}
+    _gap_status_lock = threading.Lock()
+
     @app.post("/api/projects/{project_id}/gap-analysis", status_code=202)
-    def start_gap_analysis(project_id: str, background_tasks: BackgroundTasks):
+    def start_gap_analysis(
+        project_id: str,
+        background_tasks: BackgroundTasks,
+        run_llm: bool = False,
+    ):
         if not db.get_project(project_id):
             raise HTTPException(404, "Project not found")
+
+        with _gap_status_lock:
+            current = _gap_status.get(project_id, {})
+            if current.get("status") == "running":
+                raise HTTPException(409, "Analysis already running")
+            _gap_status[project_id] = {
+                "status": "running",
+                "started_at": datetime.now(UTC).isoformat(),
+                "error": None,
+            }
 
         def run_analysis():
             import logging
             log = logging.getLogger("openaustria_rag.gap_analysis")
             try:
-                log.info(f"Starting gap analysis for project {project_id}")
+                log.info(f"Starting gap analysis for project {project_id} (llm={run_llm})")
                 analyzer = GapAnalyzer(
                     db=db,
                     vector_store=vector_store,
                     embedding_service=embedding_service,
                     llm_service=llm_service,
-                    run_llm_analysis=False,
+                    run_llm_analysis=run_llm,
                 )
                 report = analyzer.analyze(project_id)
+                with _gap_status_lock:
+                    _gap_status[project_id] = {
+                        "status": "done",
+                        "finished_at": datetime.now(UTC).isoformat(),
+                        "error": None,
+                    }
                 log.info(
                     f"Gap analysis complete: {report.summary.total_code_elements} elements, "
                     f"{report.summary.undocumented} undocumented, "
                     f"{report.summary.divergent} divergent"
                 )
-            except Exception:
+            except Exception as exc:
                 log.exception(f"Gap analysis failed for project {project_id}")
+                with _gap_status_lock:
+                    _gap_status[project_id] = {
+                        "status": "error",
+                        "finished_at": datetime.now(UTC).isoformat(),
+                        "error": str(exc),
+                    }
 
         background_tasks.add_task(run_analysis)
         return {"message": "Gap analysis started", "project_id": project_id}
+
+    @app.get("/api/projects/{project_id}/gap-analysis/status")
+    def get_gap_analysis_status(project_id: str):
+        if not db.get_project(project_id):
+            raise HTTPException(404, "Project not found")
+        with _gap_status_lock:
+            status = _gap_status.get(project_id, {"status": "idle"})
+        return status
 
     @app.get("/api/projects/{project_id}/gap-analysis/latest")
     def get_latest_gap_report(project_id: str):

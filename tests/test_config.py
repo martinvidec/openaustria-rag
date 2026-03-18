@@ -1,6 +1,15 @@
 """Tests for the configuration system."""
 
+import pytest
+
 from openaustria_rag.config import Settings, get_settings
+
+
+@pytest.fixture(autouse=True)
+def _isolate_config(tmp_path, monkeypatch):
+    """Ensure tests read no config.yaml so they see pure defaults."""
+    import openaustria_rag.config as cfg
+    monkeypatch.setattr(cfg, "DEFAULT_CONFIG_PATH", tmp_path / "nonexistent.yaml")
 
 
 class TestDefaults:
