@@ -99,7 +99,15 @@ def main():
     st.divider()
 
     if st.button("Einstellungen speichern", type="primary"):
-        st.info("Einstellungen werden in der nächsten Version persistiert (config.yaml).")
+        try:
+            client.update_settings(
+                ollama={"base_url": ollama_url, "model": llm_model, "temperature": temperature},
+                chunking={"code_max_tokens": code_max, "doc_max_tokens": doc_max},
+                gap_analysis={"name_similarity_threshold": name_threshold},
+            )
+            st.success("Einstellungen gespeichert (config.yaml).")
+        except Exception as e:
+            st.error(f"Fehler beim Speichern: {e}")
 
 
 if __name__ == "__main__":
