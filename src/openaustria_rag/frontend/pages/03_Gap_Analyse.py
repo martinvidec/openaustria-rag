@@ -124,6 +124,17 @@ def main():
 
     # Summary metrics
     summary = report.get("summary", {})
+
+    if summary.get("total_code_elements", 0) == 0:
+        st.warning(
+            "Keine Code-Elemente gefunden. Moegliche Ursachen:\n"
+            "- Die Programmiersprache wird noch nicht unterstuetzt "
+            "(aktuell: Java, Python, TypeScript)\n"
+            "- Die Quellen wurden noch nicht synchronisiert\n"
+            "- Das Projekt enthaelt keinen analysierbaren Code"
+        )
+        return
+
     st.subheader("Übersicht")
 
     col1, col2, col3, col4 = st.columns(4)
