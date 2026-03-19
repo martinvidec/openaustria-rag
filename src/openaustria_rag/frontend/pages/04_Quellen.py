@@ -2,7 +2,7 @@
 
 import streamlit as st
 
-from openaustria_rag.frontend.dashboard import get_client, init_session_state, render_sidebar
+from openaustria_rag.frontend.Dashboard import get_client, init_session_state, render_sidebar
 
 SOURCE_TYPE_ICONS = {"git": "🔗", "zip": "📦", "confluence": "📄"}
 
