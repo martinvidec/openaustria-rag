@@ -7,6 +7,18 @@ import streamlit as st
 from openaustria_rag.frontend.Dashboard import get_client, init_session_state, render_sidebar
 
 
+def _render_metrics(m: dict, model: str):
+    """Render chat metrics as a compact single-line caption."""
+    parts = [
+        f"**{m.get('model', model)}**",
+        f"Retrieval {m.get('retrieval_time_ms', 0):.0f}ms",
+        f"Generierung {m.get('generation_time_ms', 0):.1f}s",
+        f"{m.get('token_count', 0)} Tokens",
+        f"{m.get('tokens_per_second', 0):.1f} tok/s",
+    ]
+    st.caption(" · ".join(parts))
+
+
 def main():
     init_session_state()
     render_sidebar()
@@ -54,13 +66,7 @@ def main():
                         score = f" ({src['score']:.3f})" if "score" in src else ""
                         st.markdown(f"{i}. {icon} `{src.get('file_path', 'unbekannt')}`{score}")
             if msg.get("metrics"):
-                m = msg["metrics"]
-                cols = st.columns(5)
-                cols[0].metric("Modell", m.get("model", active_model))
-                cols[1].metric("Retrieval", f"{m.get('retrieval_time_ms', 0):.0f}ms")
-                cols[2].metric("Generierung", f"{m.get('generation_time_ms', 0):.0f}s")
-                cols[3].metric("Tokens", m.get("token_count", 0))
-                cols[4].metric("Geschw.", f"{m.get('tokens_per_second', 0):.1f} tok/s")
+                _render_metrics(msg["metrics"], active_model)
 
     # Chat input
     if prompt := st.chat_input("Frage stellen..."):
@@ -104,12 +110,7 @@ def _handle_streaming(client, project_id, prompt, top_k, active_model):
 
         if metrics:
             metrics["model"] = active_model
-            cols = st.columns(5)
-            cols[0].metric("Modell", active_model)
-            cols[1].metric("Retrieval", f"{metrics.get('retrieval_time_ms', 0):.0f}ms")
-            cols[2].metric("Generierung", f"{metrics.get('generation_time_ms', 0):.1f}s")
-            cols[3].metric("Tokens", metrics.get("token_count", 0))
-            cols[4].metric("Geschw.", f"{metrics.get('tokens_per_second', 0):.1f} tok/s")
+            _render_metrics(metrics, active_model)
 
         st.session_state.chat_messages.append({
             "role": "assistant",
@@ -148,12 +149,7 @@ def _handle_blocking(client, project_id, prompt, top_k, active_model):
                 "token_count": tokens,
                 "tokens_per_second": tps,
             }
-            cols = st.columns(5)
-            cols[0].metric("Modell", active_model)
-            cols[1].metric("Retrieval", f"{metrics['retrieval_time_ms']:.0f}ms")
-            cols[2].metric("Generierung", f"{metrics['generation_time_ms']:.1f}s")
-            cols[3].metric("Tokens", metrics["token_count"])
-            cols[4].metric("Geschw.", f"{metrics['tokens_per_second']:.1f} tok/s")
+            _render_metrics(metrics, active_model)
 
             st.session_state.chat_messages.append({
                 "role": "assistant", "content": answer, "metrics": metrics,
