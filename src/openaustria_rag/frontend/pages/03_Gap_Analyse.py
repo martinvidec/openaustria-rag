@@ -74,8 +74,10 @@ def main():
     # Status display
     if is_running:
         started = status.get("started_at", "")
-        st.info(f"Gap-Analyse laeuft seit {started[:19].replace('T', ' ')} UTC ...")
-        st.progress(0.0, text="Analyse laeuft im Hintergrund...")
+        st.warning(
+            f"⏳ Gap-Analyse laeuft seit {started[:19].replace('T', ' ')} UTC ... "
+            "Klicke auf **Aktualisieren** um den Status zu pruefen."
+        )
     elif status.get("status") == "error":
         st.error(f"Letzte Analyse fehlgeschlagen: {status.get('error', 'Unbekannter Fehler')}")
     elif status.get("status") == "done" and not report:
