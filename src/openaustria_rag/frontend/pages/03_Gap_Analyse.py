@@ -1,6 +1,7 @@
 """Streamlit page: Gap analysis dashboard (SPEC-06 Section 3.3)."""
 
 import json
+from datetime import timedelta
 
 import streamlit as st
 
@@ -19,6 +20,41 @@ GAP_TYPE_LABELS = {
     "divergent": "Abweichend",
     "consistent": "Konsistent",
 }
+
+
+STAGE_LABELS = {
+    "loading": "Daten laden",
+    "matching": "Code-Elemente abgleichen",
+    "llm_analysis": "LLM-Divergenzanalyse",
+}
+
+
+@st.fragment(run_every=timedelta(seconds=2))
+def _render_progress(client, project_id, initial_status):
+    """Auto-refreshing progress display."""
+    try:
+        status = client.get_gap_analysis_status(project_id)
+    except Exception:
+        status = initial_status
+
+    if status.get("status") != "running":
+        st.rerun()
+        return
+
+    stage = status.get("stage", "")
+    processed = status.get("processed", 0)
+    total = status.get("total", 0)
+    current_file = status.get("current_file", "")
+    stage_label = STAGE_LABELS.get(stage, stage or "Initialisierung")
+
+    if total > 0:
+        pct = processed / total
+        st.progress(pct, text=f"{stage_label}: {processed}/{total}")
+    else:
+        st.progress(0.0, text=f"{stage_label}...")
+
+    if current_file:
+        st.caption(f"Aktuell: `{current_file}`")
 
 
 def main():
@@ -42,27 +78,48 @@ def main():
         st.error(f"Fehler: {e}")
         report = None
 
-    # Start analysis button
-    col1, col2 = st.columns([1, 3])
+    # Analysis status
+    try:
+        status = client.get_gap_analysis_status(project_id)
+    except Exception:
+        status = {"status": "idle"}
+
+    is_running = status.get("status") == "running"
+
+    # Controls
+    col1, col2, col3 = st.columns([2, 1, 1])
     with col1:
-        if st.button("Analyse starten", type="primary"):
+        run_llm = st.toggle(
+            "LLM-Divergenzanalyse",
+            value=False,
+            help="Nutzt das konfigurierte LLM um Code-Doku-Divergenzen im Detail zu analysieren. Dauert deutlich laenger.",
+            disabled=is_running,
+        )
+    with col2:
+        label = "Analyse laeuft..." if is_running else "Analyse starten"
+        if st.button(label, type="primary", disabled=is_running):
             try:
-                client.start_gap_analysis(project_id)
-                st.info(
-                    "Gap-Analyse wurde im Hintergrund gestartet. "
-                    "Dies kann je nach Projektgröße einige Minuten dauern. "
-                    "Klicke auf **Ergebnisse aktualisieren** um den Status zu prüfen."
-                )
+                client.start_gap_analysis(project_id, run_llm=run_llm)
+                st.rerun()
             except Exception as e:
                 st.error(f"Fehler: {e}")
-    with col2:
-        if st.button("Ergebnisse aktualisieren"):
+    with col3:
+        if st.button("Aktualisieren"):
             st.rerun()
+
+    # Status display with auto-refresh
+    if is_running:
+        _render_progress(client, project_id, status)
+    elif status.get("status") == "error":
+        st.error(f"Letzte Analyse fehlgeschlagen: {status.get('error', 'Unbekannter Fehler')}")
+    elif status.get("status") == "done" and not report:
+        st.success("Analyse abgeschlossen. Lade Ergebnisse...")
+        st.rerun()
 
     st.divider()
 
     if not report:
-        st.info("Noch keine Gap-Analyse durchgeführt. Starte eine Analyse oben.")
+        st.info("Noch keine Gap-Analyse durchgefuehrt. Starte eine Analyse oben.")
         return
 
     # Summary metrics

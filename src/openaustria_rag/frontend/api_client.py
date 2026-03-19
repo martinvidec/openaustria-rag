@@ -110,8 +110,14 @@ class APIClient:
 
     # --- Gap Analysis ---
 
-    def start_gap_analysis(self, project_id: str) -> dict:
-        return self._post(f"/api/projects/{project_id}/gap-analysis")
+    def start_gap_analysis(self, project_id: str, run_llm: bool = False) -> dict:
+        return self._post(
+            f"/api/projects/{project_id}/gap-analysis",
+            params={"run_llm": str(run_llm).lower()},
+        )
+
+    def get_gap_analysis_status(self, project_id: str) -> dict:
+        return self._get(f"/api/projects/{project_id}/gap-analysis/status")
 
     def get_latest_gap_report(self, project_id: str) -> dict | None:
         resp = self._session.get(
