@@ -19,8 +19,10 @@ def render_chat_message(msg: dict):
 
         if msg.get("metrics"):
             m = msg["metrics"]
-            cols = st.columns(4)
-            cols[0].metric("Modell", m.get("model", "?"))
-            cols[1].metric("Retrieval", f"{m.get('retrieval_time_ms', 0):.0f}ms")
-            cols[2].metric("Generierung", f"{m.get('generation_time_ms', 0):.0f}ms")
-            cols[3].metric("Tokens", m.get("token_count", 0))
+            parts = [
+                f"**{m.get('model', '?')}**",
+                f"Retrieval {m.get('retrieval_time_ms', 0):.0f}ms",
+                f"Generierung {m.get('generation_time_ms', 0):.0f}ms",
+                f"{m.get('token_count', 0)} Tokens",
+            ]
+            st.caption(" · ".join(parts))
