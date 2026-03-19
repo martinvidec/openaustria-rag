@@ -400,6 +400,16 @@ def create_app() -> FastAPI:
         def run_analysis():
             import logging
             log = logging.getLogger("openaustria_rag.gap_analysis")
+
+            def on_progress(stage: str, current: int, total: int, detail: str):
+                with _gap_status_lock:
+                    _gap_status[project_id].update({
+                        "stage": stage,
+                        "processed": current,
+                        "total": total,
+                        "current_file": detail,
+                    })
+
             try:
                 log.info(f"Starting gap analysis for project {project_id} (llm={run_llm})")
                 analyzer = GapAnalyzer(
@@ -408,6 +418,7 @@ def create_app() -> FastAPI:
                     embedding_service=embedding_service,
                     llm_service=llm_service,
                     run_llm_analysis=run_llm,
+                    progress_callback=on_progress,
                 )
                 report = analyzer.analyze(project_id)
                 with _gap_status_lock:

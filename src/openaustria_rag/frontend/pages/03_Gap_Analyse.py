@@ -1,6 +1,7 @@
 """Streamlit page: Gap analysis dashboard (SPEC-06 Section 3.3)."""
 
 import json
+from datetime import timedelta
 
 import streamlit as st
 
@@ -19,6 +20,41 @@ GAP_TYPE_LABELS = {
     "divergent": "Abweichend",
     "consistent": "Konsistent",
 }
+
+
+STAGE_LABELS = {
+    "loading": "Daten laden",
+    "matching": "Code-Elemente abgleichen",
+    "llm_analysis": "LLM-Divergenzanalyse",
+}
+
+
+@st.fragment(run_every=timedelta(seconds=2))
+def _render_progress(client, project_id, initial_status):
+    """Auto-refreshing progress display."""
+    try:
+        status = client.get_gap_analysis_status(project_id)
+    except Exception:
+        status = initial_status
+
+    if status.get("status") != "running":
+        st.rerun()
+        return
+
+    stage = status.get("stage", "")
+    processed = status.get("processed", 0)
+    total = status.get("total", 0)
+    current_file = status.get("current_file", "")
+    stage_label = STAGE_LABELS.get(stage, stage or "Initialisierung")
+
+    if total > 0:
+        pct = processed / total
+        st.progress(pct, text=f"{stage_label}: {processed}/{total}")
+    else:
+        st.progress(0.0, text=f"{stage_label}...")
+
+    if current_file:
+        st.caption(f"Aktuell: `{current_file}`")
 
 
 def main():
@@ -71,13 +107,9 @@ def main():
         if st.button("Aktualisieren"):
             st.rerun()
 
-    # Status display
+    # Status display with auto-refresh
     if is_running:
-        started = status.get("started_at", "")
-        st.warning(
-            f"⏳ Gap-Analyse laeuft seit {started[:19].replace('T', ' ')} UTC ... "
-            "Klicke auf **Aktualisieren** um den Status zu pruefen."
-        )
+        _render_progress(client, project_id, status)
     elif status.get("status") == "error":
         st.error(f"Letzte Analyse fehlgeschlagen: {status.get('error', 'Unbekannter Fehler')}")
     elif status.get("status") == "done" and not report:

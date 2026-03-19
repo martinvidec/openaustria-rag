@@ -5,6 +5,7 @@ import io
 import json
 import logging
 import uuid
+from collections.abc import Callable
 from dataclasses import asdict
 from datetime import UTC, datetime
 
@@ -68,6 +69,7 @@ class GapAnalyzer:
         max_embedding_candidates: int = 5,
         run_llm_analysis: bool = True,
         max_llm_analyses: int = 50,
+        progress_callback: Callable[[str, int, int, str], None] | None = None,
     ):
         self.db = db
         self.vector_store = vector_store
@@ -83,12 +85,19 @@ class GapAnalyzer:
         self.max_embedding_candidates = max_embedding_candidates
         self.run_llm_analysis = run_llm_analysis
         self.max_llm_analyses = max_llm_analyses
+        self._progress = progress_callback
+
+    def _report_progress(self, stage: str, current: int, total: int, detail: str = ""):
+        if self._progress:
+            self._progress(stage, current, total, detail)
 
     def analyze(self, project_id: str) -> GapReport:
         """Run the full three-stage gap analysis."""
         # Stage 1: Load and filter
+        self._report_progress("loading", 0, 0, "Code-Elemente laden...")
         code_elements = self._load_code_elements(project_id)
         doc_chunks = self._load_doc_chunks(project_id)
+        self._report_progress("loading", 0, 0, f"{len(code_elements)} Elemente, {len(doc_chunks)} Doku-Chunks")
 
         # Stage 2: Matching
         matches = self._match_elements(code_elements, doc_chunks, project_id)
@@ -163,7 +172,9 @@ class GapAnalyzer:
         # Pre-lowercase all chunk contents for fast substring matching
         chunk_contents_lower = [c["content"].lower() for c in doc_chunks]
 
-        for element in code_elements:
+        total = len(code_elements)
+        for idx, element in enumerate(code_elements):
+            self._report_progress("matching", idx + 1, total, element.file_path)
             match = MatchResult(code_element=element)
 
             # Name-based matching: fast exact substring first, then fuzzy fallback
@@ -255,14 +266,16 @@ class GapAnalyzer:
     # --- Stage 3: LLM Divergence Analysis ---
 
     def _analyze_divergences(self, matches: list[MatchResult]) -> None:
-        consistent = [m for m in matches if m.gap_type == GapType.CONSISTENT]
+        consistent = [m for m in matches if m.gap_type == GapType.CONSISTENT and m.doc_chunk_content]
+        total = min(len(consistent), self.max_llm_analyses)
         analyzed = 0
 
         for match in consistent:
             if analyzed >= self.max_llm_analyses:
                 break
-            if not match.doc_chunk_content:
-                continue
+
+            analyzed += 1
+            self._report_progress("llm_analysis", analyzed, total, match.code_element.file_path)
 
             result = self._llm_analyze_pair(
                 match.code_element, match.doc_chunk_content
@@ -271,8 +284,6 @@ class GapAnalyzer:
 
             if not result.consistent:
                 match.gap_type = GapType.DIVERGENT
-
-            analyzed += 1
 
     def _llm_analyze_pair(
         self, element: CodeElement, doc_text: str
