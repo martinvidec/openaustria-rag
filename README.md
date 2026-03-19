@@ -60,7 +60,7 @@ ollama pull qwen2.5-coder:14b    # Leistungsstaerker, benoetigt ~8.5 GB VRAM
 uvicorn openaustria_rag.main:app --host 0.0.0.0 --port 8000 &
 
 # 5. Frontend starten
-streamlit run src/openaustria_rag/frontend/app.py --server.port 8501
+streamlit run src/openaustria_rag/frontend/dashboard.py --server.port 8501
 
 # 6. Im Browser oeffnen: http://localhost:8501
 ```

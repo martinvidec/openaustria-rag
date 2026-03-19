@@ -5,7 +5,7 @@ from datetime import timedelta
 
 import streamlit as st
 
-from openaustria_rag.frontend.app import get_client, init_session_state, render_sidebar
+from openaustria_rag.frontend.dashboard import get_client, init_session_state, render_sidebar
 
 SEVERITY_BADGES = {
     "critical": "🔴",
