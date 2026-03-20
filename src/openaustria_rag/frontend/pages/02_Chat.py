@@ -88,11 +88,15 @@ def _handle_streaming(client, project_id, prompt, top_k, active_model):
     metrics = {}
     sources = []
 
+    # Show retrieval indicator before first event arrives
+    placeholder.markdown("_Suche relevante Dokumente..._")
+
     try:
         for event in client.query_stream(project_id, prompt, top_k=top_k):
             if event["type"] == "sources":
                 metrics["retrieval_time_ms"] = event.get("retrieval_time_ms", 0)
                 sources = event.get("sources", [])
+                placeholder.markdown("_Generiere Antwort..._")
             elif event["type"] == "token":
                 full_response += event["content"]
                 placeholder.markdown(full_response + "▌")

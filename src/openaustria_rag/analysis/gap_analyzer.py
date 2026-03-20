@@ -34,6 +34,11 @@ from .matching import (
 
 logger = logging.getLogger(__name__)
 
+
+class AnalysisCancelledError(Exception):
+    """Raised when a gap analysis is cancelled by the user."""
+
+
 GAP_CHECK_PROMPT = """Du bist ein Software-Qualitaetsanalyst.
 Vergleiche den folgenden Code mit der zugehoerigen Dokumentation.
 Antworte in genau diesem Format:
@@ -70,6 +75,7 @@ class GapAnalyzer:
         run_llm_analysis: bool = True,
         max_llm_analyses: int = 50,
         progress_callback: Callable[[str, int, int, str], None] | None = None,
+        cancel_check: Callable[[], bool] | None = None,
     ):
         self.db = db
         self.vector_store = vector_store
@@ -86,10 +92,15 @@ class GapAnalyzer:
         self.run_llm_analysis = run_llm_analysis
         self.max_llm_analyses = max_llm_analyses
         self._progress = progress_callback
+        self._cancel_check = cancel_check
 
     def _report_progress(self, stage: str, current: int, total: int, detail: str = ""):
         if self._progress:
             self._progress(stage, current, total, detail)
+
+    def _check_cancelled(self):
+        if self._cancel_check and self._cancel_check():
+            raise AnalysisCancelledError("Analysis cancelled by user")
 
     def analyze(self, project_id: str) -> GapReport:
         """Run the full three-stage gap analysis."""
@@ -174,6 +185,7 @@ class GapAnalyzer:
 
         total = len(code_elements)
         for idx, element in enumerate(code_elements):
+            self._check_cancelled()
             self._report_progress("matching", idx + 1, total, element.file_path)
             match = MatchResult(code_element=element)
 
@@ -274,6 +286,7 @@ class GapAnalyzer:
             if analyzed >= self.max_llm_analyses:
                 break
 
+            self._check_cancelled()
             analyzed += 1
             self._report_progress("llm_analysis", analyzed, total, match.code_element.file_path)
 

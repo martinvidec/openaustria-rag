@@ -167,6 +167,34 @@ class TestQueryEndpoint:
         assert resp.status_code == 404
 
 
+class TestSyncProgress:
+    def _create_project_and_source(self, client):
+        pid = client.post("/api/projects", json={"name": f"P-{uuid.uuid4().hex[:8]}"}).json()["id"]
+        sid = client.post(f"/api/projects/{pid}/sources", json={
+            "source_type": "git", "name": "repo", "config": {"url": "https://example.com/r.git"},
+        }).json()["id"]
+        return pid, sid
+
+    def test_sync_progress_idle(self, client):
+        _pid, sid = self._create_project_and_source(client)
+        resp = client.get(f"/api/sources/{sid}/sync-progress")
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "idle"
+
+    def test_sync_progress_running(self, client):
+        _pid, sid = self._create_project_and_source(client)
+        with patch("openaustria_rag.frontend.api.run_sync"):
+            client.post(f"/api/sources/{sid}/sync")
+        resp = client.get(f"/api/sources/{sid}/sync-progress")
+        assert resp.status_code == 200
+        # After sync background task completes (patched), status may vary
+        assert resp.json()["status"] in ("running", "done", "error")
+
+    def test_sync_progress_not_found(self, client):
+        resp = client.get("/api/sources/nonexistent/sync-progress")
+        assert resp.status_code == 404
+
+
 class TestGapAnalysisEndpoints:
     def test_start_gap_analysis_returns_202(self, client):
         pid = client.post("/api/projects", json={"name": "G"}).json()["id"]
@@ -177,3 +205,14 @@ class TestGapAnalysisEndpoints:
         pid = client.post("/api/projects", json={"name": "G2"}).json()["id"]
         resp = client.get(f"/api/projects/{pid}/gap-analysis/latest")
         assert resp.status_code == 404
+
+    def test_cancel_no_running_analysis(self, client):
+        pid = client.post("/api/projects", json={"name": "G3"}).json()["id"]
+        resp = client.post(f"/api/projects/{pid}/gap-analysis/cancel")
+        assert resp.status_code == 409
+
+    def test_gap_analysis_status_idle(self, client):
+        pid = client.post("/api/projects", json={"name": "G4"}).json()["id"]
+        resp = client.get(f"/api/projects/{pid}/gap-analysis/status")
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "idle"
