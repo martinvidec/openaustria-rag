@@ -34,8 +34,8 @@ Das System ist als modulare 6-Schichten-Architektur aufgebaut:
 2. **Ingestion Pipeline** -- tree-sitter Code-Parsing (Java/Python/TypeScript), semantisches Chunking, SHA-256 Change Detection, Batch-Embedding
 3. **Vector Store** -- ChromaDB mit Cosine-Distance, separaten Collections pro Projekt und Content-Typ
 4. **RAG/Query Engine** -- Query-Typ-Erkennung (DE), Multi-Collection-Retrieval, Keyword+Source-Type Reranking, Embedding-Cache, Streaming
-5. **Gap-Analyse Engine** -- Dreistufig: Strukturextraktion mit Boilerplate-Filterung, Name+Embedding Matching, optionale LLM-Divergenzanalyse
-6. **Frontend + API** -- Streamlit UI (Chat, Gap-Dashboard, Projektverwaltung, Einstellungen) + FastAPI REST Backend mit 20+ Endpoints
+5. **Gap-Analyse Engine** -- Dreistufig: Strukturextraktion mit Boilerplate-Filterung, Name+Embedding Matching, optionale LLM-Divergenzanalyse. Live-Fortschrittsanzeige im UI.
+6. **Frontend + API** -- Streamlit UI (Dashboard, Projekte, Chat, Gap-Analyse, Quellen, Einstellungen) + FastAPI REST Backend mit 20+ Endpoints
 
 ## Quick Start
 
@@ -57,12 +57,15 @@ ollama pull qwen2.5-coder:7b     # Code-optimiert, ideal fuer 16 GB RAM
 ollama pull qwen2.5-coder:14b    # Leistungsstaerker, benoetigt ~8.5 GB VRAM
 
 # 4. Backend starten
-uvicorn openaustria_rag.main:app --host 0.0.0.0 --port 8000 &
+python3 -m uvicorn openaustria_rag.main:app --host 0.0.0.0 --port 8000 &
 
 # 5. Frontend starten
-streamlit run src/openaustria_rag/frontend/Dashboard.py --server.port 8501
+python3 -m streamlit run src/openaustria_rag/frontend/Dashboard.py --server.port 8501 --server.headless true
 
 # 6. Im Browser oeffnen: http://localhost:8501
+
+# Services stoppen
+pgrep -f "uvicorn|streamlit" | xargs kill
 ```
 
 ## Verwendung
@@ -124,7 +127,7 @@ openaustria-rag/
 │       ├── api.py                     # FastAPI App Factory (20+ Endpoints)
 │       ├── api_client.py              # HTTP Client fuer Backend
 │       ├── schemas.py                 # Pydantic Request/Response Models
-│       ├── app.py                     # Streamlit Main App
+│       ├── Dashboard.py               # Streamlit Entry Point + Dashboard
 │       ├── pages/
 │       │   ├── 01_Projekte.py         # Projektverwaltung CRUD
 │       │   ├── 02_Chat.py             # Streaming Chat mit Quellen
@@ -212,7 +215,8 @@ REST API auf `http://localhost:8000`:
 | POST | `/api/sources/{id}/sync` | Sync starten (Background) |
 | POST | `/api/projects/{id}/query` | RAG Query |
 | POST | `/api/projects/{id}/query/stream` | Streaming Query (SSE) |
-| POST | `/api/projects/{id}/gap-analysis` | Gap-Analyse starten |
+| POST | `/api/projects/{id}/gap-analysis` | Gap-Analyse starten (`?run_llm=true`) |
+| GET | `/api/projects/{id}/gap-analysis/status` | Analyse-Fortschritt |
 | GET | `/api/projects/{id}/gap-analysis/latest` | Letzter Report |
 
 Vollstaendige API-Dokumentation: `http://localhost:8000/docs`
