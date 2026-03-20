@@ -76,6 +76,9 @@ class APIClient:
     def test_connection(self, source_id: str) -> dict:
         return self._post(f"/api/sources/{source_id}/test")
 
+    def get_sync_progress(self, source_id: str) -> dict:
+        return self._get(f"/api/sources/{source_id}/sync-progress")
+
     # --- Query ---
 
     def query(self, project_id: str, query: str, session_id: str | None = None,
@@ -118,6 +121,9 @@ class APIClient:
 
     def get_gap_analysis_status(self, project_id: str) -> dict:
         return self._get(f"/api/projects/{project_id}/gap-analysis/status")
+
+    def cancel_gap_analysis(self, project_id: str) -> dict:
+        return self._post(f"/api/projects/{project_id}/gap-analysis/cancel")
 
     def get_latest_gap_report(self, project_id: str) -> dict | None:
         resp = self._session.get(

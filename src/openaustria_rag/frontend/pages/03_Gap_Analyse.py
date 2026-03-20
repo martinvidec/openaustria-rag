@@ -1,7 +1,7 @@
 """Streamlit page: Gap analysis dashboard (SPEC-06 Section 3.3)."""
 
 import json
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 import streamlit as st
 
@@ -31,13 +31,13 @@ STAGE_LABELS = {
 
 @st.fragment(run_every=timedelta(seconds=2))
 def _render_progress(client, project_id, initial_status):
-    """Auto-refreshing progress display."""
+    """Auto-refreshing progress display with ETA and cancel."""
     try:
         status = client.get_gap_analysis_status(project_id)
     except Exception:
         status = initial_status
 
-    if status.get("status") != "running":
+    if status.get("status") not in ("running",):
         st.rerun()
         return
 
@@ -53,8 +53,30 @@ def _render_progress(client, project_id, initial_status):
     else:
         st.progress(0.0, text=f"{stage_label}...")
 
+    # ETA calculation
+    started_at = status.get("started_at")
+    if started_at and processed > 0 and total > 0:
+        try:
+            start_time = datetime.fromisoformat(started_at)
+            elapsed = (datetime.now(start_time.tzinfo) - start_time).total_seconds()
+            remaining_items = total - processed
+            eta_seconds = remaining_items * (elapsed / processed)
+            if eta_seconds > 0:
+                mins, secs = divmod(int(eta_seconds), 60)
+                st.caption(f"~{mins}:{secs:02d} verbleibend")
+        except Exception:
+            pass
+
     if current_file:
         st.caption(f"Aktuell: `{current_file}`")
+
+    # Cancel button
+    if st.button("Abbrechen", key="cancel_gap"):
+        try:
+            client.cancel_gap_analysis(project_id)
+            st.warning("Abbruch angefordert...")
+        except Exception as e:
+            st.error(f"Fehler beim Abbrechen: {e}")
 
 
 def main():
@@ -110,6 +132,8 @@ def main():
     # Status display with auto-refresh
     if is_running:
         _render_progress(client, project_id, status)
+    elif status.get("status") == "cancelled":
+        st.warning("Analyse wurde abgebrochen.")
     elif status.get("status") == "error":
         st.error(f"Letzte Analyse fehlgeschlagen: {status.get('error', 'Unbekannter Fehler')}")
     elif status.get("status") == "done" and not report:

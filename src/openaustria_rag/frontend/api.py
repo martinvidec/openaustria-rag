@@ -9,7 +9,7 @@ from pathlib import Path
 from fastapi import BackgroundTasks, FastAPI, HTTPException
 from fastapi.responses import JSONResponse, StreamingResponse
 
-from ..analysis.gap_analyzer import FalsePositiveManager, GapAnalyzer, GapReportExporter
+from ..analysis.gap_analyzer import AnalysisCancelledError, FalsePositiveManager, GapAnalyzer, GapReportExporter
 from ..config import DEFAULT_CONFIG_PATH, get_settings
 from ..db import MetadataDB
 from ..ingestion.chunking import ChunkingService
@@ -160,8 +160,64 @@ def create_app() -> FastAPI:
         project = db.get_project(source.project_id)
         if not project:
             raise HTTPException(404, "Project not found")
-        background_tasks.add_task(run_sync, source, project, db, pipeline)
+
+        with _sync_status_lock:
+            _sync_status[source_id] = {
+                "status": "running",
+                "stage": "starting",
+                "processed": 0,
+                "total": 0,
+                "current_file": "",
+                "chunks_created": 0,
+                "errors": 0,
+                "started_at": datetime.now(UTC).isoformat(),
+            }
+
+        def on_sync_progress(stage: str, current: int, total: int, detail: str):
+            with _sync_status_lock:
+                entry = _sync_status.get(source_id, {})
+                entry.update({
+                    "stage": stage,
+                    "processed": current,
+                    "total": total,
+                    "current_file": detail,
+                })
+                _sync_status[source_id] = entry
+
+        def run_sync_with_status():
+            try:
+                result = run_sync(source, project, db, pipeline, progress_callback=on_sync_progress)
+                with _sync_status_lock:
+                    _sync_status[source_id] = {
+                        "status": "done",
+                        "stage": "done",
+                        "processed": result.documents_processed,
+                        "total": result.documents_processed,
+                        "current_file": "",
+                        "chunks_created": result.chunks_created,
+                        "errors": result.documents_failed,
+                        "finished_at": datetime.now(UTC).isoformat(),
+                    }
+            except Exception as exc:
+                with _sync_status_lock:
+                    _sync_status[source_id] = {
+                        "status": "error",
+                        "stage": "error",
+                        "error": str(exc),
+                        "finished_at": datetime.now(UTC).isoformat(),
+                    }
+
+        background_tasks.add_task(run_sync_with_status)
         return {"message": "Sync started", "source_id": source_id}
+
+    @app.get("/api/sources/{source_id}/sync-progress")
+    def get_sync_progress(source_id: str):
+        source = db.get_source(source_id)
+        if not source:
+            raise HTTPException(404, "Source not found")
+        with _sync_status_lock:
+            status = _sync_status.get(source_id, {"status": "idle"})
+        return status
 
     @app.get("/api/sources/{source_id}/status", response_model=SyncStatus)
     def get_sync_status(source_id: str):
@@ -372,6 +428,12 @@ def create_app() -> FastAPI:
         )
         db._conn.commit()
 
+    # --- Sync Progress ---
+
+    # In-memory status tracking for source syncs {source_id: {status, stage, ...}}
+    _sync_status: dict[str, dict] = {}
+    _sync_status_lock = threading.Lock()
+
     # --- Gap Analysis ---
 
     # In-memory status tracking for gap analyses {project_id: {status, started_at, error}}
@@ -410,6 +472,10 @@ def create_app() -> FastAPI:
                         "current_file": detail,
                     })
 
+            def check_cancel():
+                with _gap_status_lock:
+                    return _gap_status.get(project_id, {}).get("cancel_requested", False)
+
             try:
                 log.info(f"Starting gap analysis for project {project_id} (llm={run_llm})")
                 analyzer = GapAnalyzer(
@@ -419,6 +485,7 @@ def create_app() -> FastAPI:
                     llm_service=llm_service,
                     run_llm_analysis=run_llm,
                     progress_callback=on_progress,
+                    cancel_check=check_cancel,
                 )
                 report = analyzer.analyze(project_id)
                 with _gap_status_lock:
@@ -432,6 +499,14 @@ def create_app() -> FastAPI:
                     f"{report.summary.undocumented} undocumented, "
                     f"{report.summary.divergent} divergent"
                 )
+            except AnalysisCancelledError:
+                log.info(f"Gap analysis cancelled for project {project_id}")
+                with _gap_status_lock:
+                    _gap_status[project_id] = {
+                        "status": "cancelled",
+                        "finished_at": datetime.now(UTC).isoformat(),
+                        "error": None,
+                    }
             except Exception as exc:
                 log.exception(f"Gap analysis failed for project {project_id}")
                 with _gap_status_lock:
@@ -451,6 +526,17 @@ def create_app() -> FastAPI:
         with _gap_status_lock:
             status = _gap_status.get(project_id, {"status": "idle"})
         return status
+
+    @app.post("/api/projects/{project_id}/gap-analysis/cancel")
+    def cancel_gap_analysis(project_id: str):
+        if not db.get_project(project_id):
+            raise HTTPException(404, "Project not found")
+        with _gap_status_lock:
+            current = _gap_status.get(project_id, {})
+            if current.get("status") != "running":
+                raise HTTPException(409, "No running analysis to cancel")
+            current["cancel_requested"] = True
+        return {"message": "Cancel requested"}
 
     @app.get("/api/projects/{project_id}/gap-analysis/latest")
     def get_latest_gap_report(project_id: str):

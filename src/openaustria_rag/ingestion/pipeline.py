@@ -3,6 +3,7 @@
 import hashlib
 import logging
 import uuid
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Generator
@@ -60,11 +61,16 @@ class IngestionPipeline:
         documents: Generator[RawDocument, None, None],
         project_id: str,
         source_id: str,
+        progress_callback: Callable[[str, int, int, str], None] | None = None,
     ) -> IngestionResult:
         """Process a stream of RawDocuments through the full pipeline."""
         result = IngestionResult()
+        doc_num = 0
 
         for raw_doc in documents:
+            doc_num += 1
+            if progress_callback:
+                progress_callback("ingesting", doc_num, 0, raw_doc.file_path)
             try:
                 content_hash = hashlib.sha256(
                     raw_doc.content.encode("utf-8")
@@ -219,8 +225,13 @@ def run_sync(
     project: Project,
     db: MetadataDB,
     pipeline: IngestionPipeline,
+    progress_callback: Callable[[str, int, int, str], None] | None = None,
 ) -> IngestionResult:
     """Orchestrate a full source sync: connect → fetch → ingest → update status."""
+    def _report(stage: str, current: int = 0, total: int = 0, detail: str = ""):
+        if progress_callback:
+            progress_callback(stage, current, total, detail)
+
     # Update source status
     source.status = SourceStatus.SYNCING
     db.save_source(source)
@@ -228,18 +239,23 @@ def run_sync(
     db.save_project(project)
 
     try:
+        _report("connecting", 0, 0, "Verbinde...")
         connector = ConnectorRegistry.create(
             source.source_type.value, source.id, source.config
         )
         connector.connect()
 
+        _report("fetching", 0, 0, "Lade Dokumente...")
         result = pipeline.ingest(
-            connector.fetch_documents(), project.id, source.id
+            connector.fetch_documents(), project.id, source.id,
+            progress_callback=progress_callback,
         )
 
+        _report("disconnecting", 0, 0, "Trenne Verbindung...")
         connector.disconnect()
 
         # Update status
+        _report("done", result.documents_processed, result.documents_processed, "Fertig")
         source.status = SourceStatus.SYNCED
         source.last_sync_at = datetime.now(UTC)
         if result.documents_failed > 0:
@@ -255,6 +271,7 @@ def run_sync(
         return result
 
     except Exception as e:
+        _report("error", 0, 0, str(e))
         source.status = SourceStatus.ERROR
         source.error_message = str(e)
         db.save_source(source)

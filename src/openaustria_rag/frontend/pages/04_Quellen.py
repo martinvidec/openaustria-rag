@@ -1,10 +1,48 @@
 """Streamlit page: Source management (SPEC-06 Section 3.4)."""
 
+from datetime import timedelta
+
 import streamlit as st
 
 from openaustria_rag.frontend.Dashboard import get_client, init_session_state, render_sidebar
 
 SOURCE_TYPE_ICONS = {"git": "🔗", "zip": "📦", "confluence": "📄"}
+
+SYNC_STAGE_LABELS = {
+    "starting": "Starte...",
+    "connecting": "Verbinde...",
+    "fetching": "Lade Dokumente...",
+    "ingesting": "Verarbeite Dokumente",
+    "disconnecting": "Trenne Verbindung...",
+    "done": "Fertig",
+    "error": "Fehler",
+}
+
+
+@st.fragment(run_every=timedelta(seconds=2))
+def _render_sync_progress(client, source_id):
+    """Auto-refreshing progress display for a running sync."""
+    try:
+        status = client.get_sync_progress(source_id)
+    except Exception:
+        return
+
+    if status.get("status") not in ("running",):
+        st.rerun()
+        return
+
+    stage = status.get("stage", "starting")
+    processed = status.get("processed", 0)
+    current_file = status.get("current_file", "")
+    stage_label = SYNC_STAGE_LABELS.get(stage, stage)
+
+    if stage == "ingesting" and processed > 0:
+        st.info(f"{stage_label}: {processed} Dokumente verarbeitet...")
+    else:
+        st.info(f"{stage_label}")
+
+    if current_file and stage == "ingesting":
+        st.caption(f"Aktuell: `{current_file}`")
 
 
 def main():
@@ -107,6 +145,7 @@ def main():
     for source in sources:
         icon = SOURCE_TYPE_ICONS.get(source["source_type"], "📁")
         status_icon = STATUS_COLORS.get(source["status"], "⚪")
+        is_syncing = source["status"] == "syncing"
 
         with st.container(border=True):
             col1, col2, col3, col4 = st.columns([3, 1, 1, 1])
@@ -120,32 +159,36 @@ def main():
                     st.caption(f"Letzter Sync: {source['last_sync_at'][:19]}")
 
             with col2:
-                if st.button("Sync", key=f"sync_{source['id']}"):
+                if st.button("Sync", key=f"sync_{source['id']}", disabled=is_syncing):
                     try:
                         client.start_sync(source["id"])
-                        st.info("Sync gestartet...")
                         st.rerun()
                     except Exception as e:
                         st.error(f"Fehler: {e}")
 
             with col3:
-                if st.button("Test", key=f"test_{source['id']}"):
-                    try:
-                        result = client.test_connection(source["id"])
-                        if result.get("success"):
-                            st.success("Verbindung OK!")
-                        else:
-                            st.warning(f"Fehlgeschlagen: {result.get('error', '')}")
-                    except Exception as e:
-                        st.error(f"Fehler: {e}")
+                if st.button("Test", key=f"test_{source['id']}", disabled=is_syncing):
+                    with st.spinner("Teste Verbindung..."):
+                        try:
+                            result = client.test_connection(source["id"])
+                            if result.get("success"):
+                                st.success("Verbindung OK!")
+                            else:
+                                st.warning(f"Fehlgeschlagen: {result.get('error', '')}")
+                        except Exception as e:
+                            st.error(f"Fehler: {e}")
 
             with col4:
-                if st.button("Entfernen", key=f"del_{source['id']}", type="secondary"):
+                if st.button("Entfernen", key=f"del_{source['id']}", type="secondary", disabled=is_syncing):
                     try:
                         client.delete_source(source["id"])
                         st.rerun()
                     except Exception as e:
                         st.error(f"Fehler: {e}")
+
+            # Show sync progress for syncing sources
+            if is_syncing:
+                _render_sync_progress(client, source["id"])
 
 
 if __name__ == "__main__":
