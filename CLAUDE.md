@@ -4,25 +4,39 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-OpenAustria RAG is a documentation platform that ingests multiple sources (Git repos, Confluence, ZIP uploads) via connectors, indexes them with RAG (Retrieval-Augmented Generation), and identifies gaps/divergences between code and documentation using a local LLM. Two MVP variants exist: a fully local variant (Ollama + 16GB RAM) and a cloud/hybrid variant (API-key-based, provider-flexible).
+OpenAustria RAG is a documentation platform that ingests multiple sources (Git repos, Confluence, ZIP uploads) via connectors, indexes them with RAG (Retrieval-Augmented Generation), and identifies gaps/divergences between code and documentation using a local LLM.
 
 ## Project Status
 
-This project is in the **pre-implementation/specification phase**. No source code exists yet — only concept documents (`docs/MVP_KONZEPT.md`, `docs/MVP_KONZEPT_CLOUD.md`) and detailed technical specifications (`docs/specs/SPEC_01` through `SPEC_06`). Implementation should follow the planned structure in `docs/MVP_KONZEPT.md` Appendix B.
+The MVP is **implemented and functional**. All 6 layers are built, 305+ tests pass, and the system runs locally with Ollama.
 
-## Planned Tech Stack
+## Tech Stack
 
 - **Language:** Python 3.11+
-- **LLM Runtime:** Ollama (Mistral 7B Q4_K_M default)
-- **Embeddings:** Nomic Embed Text v1.5 via Ollama
-- **RAG Framework:** LlamaIndex 0.11+
-- **Vector DB:** ChromaDB 0.5+ (MVP) → Qdrant (Production)
-- **Code Parsing:** tree-sitter 0.22+ (Java, Python, TypeScript)
-- **Metadata DB:** SQLite
-- **API:** FastAPI 0.110+
-- **Frontend:** Streamlit 1.35+ (MVP)
+- **LLM Runtime:** Ollama (Mistral 7B, Qwen 2.5 Coder 7B/14B)
+- **Embeddings:** Nomic Embed Text v1.5 via Ollama (fixed, not user-selectable)
+- **Vector DB:** ChromaDB
+- **Code Parsing:** tree-sitter (Java, Python, TypeScript)
+- **Metadata DB:** SQLite (WAL mode)
+- **API:** FastAPI
+- **Frontend:** Streamlit
 
-## Planned Commands (once implemented)
+## Running the Application
+
+```bash
+# Start backend (API)
+python3 -m uvicorn openaustria_rag.main:app --host 0.0.0.0 --port 8000
+
+# Start frontend (Streamlit)
+python3 -m streamlit run src/openaustria_rag/frontend/Dashboard.py --server.port 8501 --server.headless true
+
+# Stop both
+pgrep -f "uvicorn|streamlit" | xargs kill
+```
+
+Both services must be running. Backend on port 8000, frontend on port 8501.
+
+## Commands
 
 ```bash
 # Install
@@ -31,32 +45,34 @@ pip install -e ".[dev]"
 # Prerequisites
 ollama pull mistral
 ollama pull nomic-embed-text
-
-# Run frontend
-streamlit run src/openaustria_rag/frontend/app.py
+ollama pull qwen2.5-coder:7b   # optional
 
 # Run tests
 pytest tests/
+
+# Run single test file
+pytest tests/test_api.py -v
 ```
 
 ## Architecture (6 Layers)
 
-The system is designed as a modular pipeline — specs document exact interfaces:
+1. **Connector Layer** (`connectors/`) — Plugin system with `BaseConnector` ABC. Git, ZIP, Confluence connectors.
+2. **Ingestion Pipeline** (`ingestion/`) — tree-sitter code parsing, semantic chunking, embedding, ChromaDB indexing.
+3. **Vector Store + Embedding** (`retrieval/`) — ChromaDB with separate collections per `{project_id}_{content_type}`.
+4. **RAG/Query Engine** (`retrieval/`, `llm/`) — Query analysis, retrieval, re-ranking, streaming LLM generation.
+5. **Gap Analysis Engine** (`analysis/`) — Three-stage: structural extraction → matching → optional LLM divergence analysis.
+6. **Frontend + API** (`frontend/`) — Streamlit (Dashboard, Projects, Chat, Gap Analysis, Sources, Settings) + FastAPI REST backend.
 
-1. **Connector Layer** (`connectors/`) — Plugin system with `BaseConnector` ABC. Git, ZIP, Confluence connectors yield `RawDocument` generators. New connectors register via `entry_points` in `pyproject.toml`. See SPEC-02.
-2. **Ingestion Pipeline** (`ingestion/`) — Processes RawDocuments through: format detection → tree-sitter code parsing → semantic chunking → metadata enrichment → embedding → ChromaDB indexing. See SPEC-03.
-3. **Vector Store + Embedding** (`retrieval/`) — ChromaDB with separate collections per `{project_id}_{content_type}`. Nomic Embed Text via Ollama REST API. See SPEC-03/04.
-4. **RAG/Query Engine** (`retrieval/`, `llm/`) — Custom QueryEngine with query analysis, embedding, retrieval, re-ranking, context assembly, and LLM generation. Ollama chat/generate API. 5 prompt templates (search, explain, compare, summarize, gap_check). See SPEC-04.
-5. **Gap Analysis Engine** (`analysis/`) — Three-stage algorithm: structural extraction (tree-sitter) → matching (name-based + embedding-based) → LLM divergence analysis. Categorizes into: consistent, undocumented, unimplemented, divergent. See SPEC-05.
-6. **Frontend + API** (`frontend/`) — Streamlit pages: Projects, Chat, Gap Analysis Dashboard, Sources, Settings. FastAPI REST endpoints. See SPEC-06.
+## Key Files
 
-## Key Data Models (SPEC-01)
-
-`Project` → has many `Source` → has many `Document` → has many `Chunk` (ChromaDB) + `CodeElement` (SQLite). Gap analysis produces `GapReport` → has many `GapItem`. All metadata in SQLite (`data/openaustria_rag.db`), vectors in ChromaDB (`data/chromadb/`).
+- **Entry point:** `src/openaustria_rag/frontend/Dashboard.py` (Streamlit main page)
+- **API factory:** `src/openaustria_rag/frontend/api.py` (`create_app()`)
+- **Config:** `src/openaustria_rag/config.py` (Settings via YAML + env vars, prefix `OARAG_`)
+- **Runtime config:** `config.yaml` (generated by Settings UI, gitignored)
 
 ## Language
 
-Documentation and specs are written in German. Code (variable names, comments, docstrings) should be in English. Prompt templates for the LLM are in German (target users are German-speaking).
+Documentation and specs are written in German. Code (variable names, comments, docstrings) should be in English. Prompt templates for the LLM are in German.
 
 ## Workflow
 
@@ -65,5 +81,3 @@ Documentation and specs are written in German. Code (variable names, comments, d
 - Create feature branches per issue (`feature/<number>-<description>`)
 - Use Conventional Commits with issue references
 - Create pull requests with standardized templates on completion
-
-Every implementation session should work on exactly one GitHub issue.
